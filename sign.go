@@ -40,7 +40,7 @@ func canonicalizedResource(url *http.URL) string {
 	// Strip any port declaration (443/80/8080/...)
 	host := first(strings.Split(url.Host, ":", 2))
 
-	if strings.HasSuffix(host, "amazonaws.com") {
+	if strings.HasSuffix(host, ".amazonaws.com") {
 		// Hostname bucket style, ignore (s3-eu-west.|s3.)amazonaws.com
 		parts := strings.Split(host, ".", -1)
 		if len(parts) > 3 {
@@ -199,7 +199,7 @@ func URL(url *http.URL, key, secret, method, expires string) (*http.URL, os.Erro
 func Authorize(req *http.Request, key, secret string) {
 	var header string
 
-	if req.URL.Host != req.Host {
+	if req.URL.Host == "" {
 		req.URL.Host = req.Host
 	}
 
