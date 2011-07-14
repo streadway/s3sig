@@ -7,7 +7,6 @@ import (
 	"sort"
 	"bytes"
 	"strings"
-	"fmt"
 	"encoding/base64"
 	"crypto/hmac"
 )
@@ -38,11 +37,20 @@ var amzQueryParams = map[string]bool{
 func canonicalizedResource(url *http.URL) string {
 	var res string
 
-	// Split and prepend the host bucket off the top of 
-	// s3-eu-west.amazonaws.com and the like
-	parts := strings.Split(url.Host, ".", -1)
-	if len(parts) > 3 {
-		res = res + "/" + strings.Join(parts[:len(parts)-3], ".")
+	// Strip any port declaration (443/80/8080/...)
+	host := first(strings.Split(url.Host, ":", 2))
+
+	if strings.HasSuffix(host, "amazonaws.com") {
+		// Hostname bucket style, ignore (s3-eu-west.|s3.)amazonaws.com
+		parts := strings.Split(host, ".", -1)
+		if len(parts) > 3 {
+			res = res + "/" + strings.Join(parts[:len(parts)-3], ".")
+		}
+	} else if len(host) > 0 {
+		// CNAME bucket style
+		res = res + "/" + host
+	} else {
+		// Bucket as root element in path already
 	}
 
 	// RawPath will include the bucket if not in the host
@@ -53,7 +61,6 @@ func canonicalizedResource(url *http.URL) string {
 	// the canonical resource.
 	var amz []string
 	for key, values := range url.Query() {
-		fmt.Println("q:", key, values)
 		if amzQueryParams[key] {
 			for _, value := range values {
 				if value != "" {
@@ -75,15 +82,16 @@ func canonicalizedResource(url *http.URL) string {
 }
 
 func first(s []string) string {
-	if len(s) > 0 { return s[0] }
+	if len(s) > 0 {
+		return s[0]
+	}
 	return ""
 }
 
 /*
- * Creates the StringToSign string for either query string
- * or Authorization header based authentication.
- *
- */
+	Creates the StringToSign string for either query string
+	or Authorization header based authentication.
+*/
 func StringToSign(method string, url *http.URL, requestHeaders http.Header, expires string) string {
 	// Positional headers are optional but should be captured
 	var contentMD5, contentType, date, amzDate string
@@ -99,7 +107,7 @@ func StringToSign(method string, url *http.URL, requestHeaders http.Header, expi
 		case "content-type":
 			contentType = first(values)
 		case "content-md5":
-			contentType = first(values)
+			contentMD5 = first(values)
 		default:
 			if strings.HasPrefix(name, "x-amz-") {
 				// Capture the x-amz-date header
@@ -119,22 +127,23 @@ func StringToSign(method string, url *http.URL, requestHeaders http.Header, expi
 
 	// overrideDate is used for query string "expires" auth
 	// and is a unix timestamp
-	if expires != "" {
+	switch {
+	case expires != "":
 		date = expires
-	} else if amzDate != "" {
+	case amzDate != "":
 		date = ""
-	} else {
-		// We could break referential transparency here by injecting
-		// the date when httpDate is empty.  Rather we assume the
+	default:
+		// Don't break referential transparency here by injecting
+		// the date when the Date is empty.  Rather we assume the
 		// caller knows what she is doing. 
 	}
 
 	return method + "\n" +
-				contentMD5 + "\n" +
-				contentType + "\n" +
-				date + "\n" +
-				strings.Join(headers, "") +
-				canonicalizedResource(url)
+		contentMD5 + "\n" +
+		contentType + "\n" +
+		date + "\n" +
+		strings.Join(headers, "") +
+		canonicalizedResource(url)
 }
 
 // Returns the signature to be used in the query string or Authorization header
@@ -153,7 +162,7 @@ func Signature(secret, toSign string) string {
 }
 
 func Authorization(req *http.Request, key, secret string) string {
-	return "AWS "+key+" "+Signature(secret, StringToSign(req.Method, req.URL, req.Header, ""))
+	return "AWS " + key + ":" + Signature(secret, StringToSign(req.Method, req.URL, req.Header, ""))
 }
 
 // Assumes no custom headers are sent so only needs access to a URL.
@@ -185,14 +194,20 @@ func URL(url *http.URL, key, secret, method, expires string) (*http.URL, os.Erro
 //
 //	Date: Mon, 02 Jan 2006 15:04:05 UTC
 //
+// If the Host does not appear in the req.URL, then it will be assigned
+// from req.Host
 func Authorize(req *http.Request, key, secret string) {
 	var header string
+
+	if req.URL.Host != req.Host {
+		req.URL.Host = req.Host
+	}
 
 	if header = req.Header.Get("Date"); len(header) == 0 {
 		if header = req.Header.Get("X-Amz-Date"); len(header) == 0 {
 			req.Header.Set("Date", time.UTC().Format(time.RFC1123))
 		}
 	}
-	sig := Signature(secret, StringToSign(req.Method, req.URL, req.Header, ""))
-	req.Header.Set("Authorization", "AWS "+key+":"+sig)
+
+	req.Header.Set("Authorization", Authorization(req, key, secret))
 }
