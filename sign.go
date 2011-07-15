@@ -5,7 +5,6 @@ import (
 	"http"
 	"time"
 	"sort"
-	"bytes"
 	"strings"
 	"encoding/base64"
 	"crypto/hmac"
@@ -153,12 +152,7 @@ func Signature(secret, toSign string) string {
 	hmac := hmac.NewSHA1([]byte(secret))
 	hmac.Write([]byte(toSign))
 
-	var buf bytes.Buffer
-	encoder := base64.NewEncoder(base64.StdEncoding, &buf)
-	encoder.Write([]byte(hmac.Sum()))
-	encoder.Close()
-
-	return buf.String()
+	return base64.StdEncoding.EncodeToString(hmac.Sum())
 }
 
 func Authorization(req *http.Request, key, secret string) string {
