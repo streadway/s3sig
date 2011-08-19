@@ -120,7 +120,7 @@ func TestAuthorize(t *testing.T) {
 }
 
 func addAuth(raw, auth, expires string) string {
-	sig := strings.Split(auth, ":", 2)[1]
+	sig := strings.SplitN(auth, ":", 2)[1]
 	extra := "AWSAccessKeyId="+AWSAccessKeyId+"&Expires="+expires+"&Signature="+sig
 	if strings.Contains(raw, "?") {
 		return raw+"&"+extra
