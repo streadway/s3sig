@@ -37,11 +37,11 @@ func canonicalizedResource(url *http.URL) string {
 	var res string
 
 	// Strip any port declaration (443/80/8080/...)
-	host := first(strings.Split(url.Host, ":", 2))
+	host := first(strings.SplitN(url.Host, ":", 2))
 
 	if strings.HasSuffix(host, ".amazonaws.com") {
 		// Hostname bucket style, ignore (s3-eu-west.|s3.)amazonaws.com
-		parts := strings.Split(host, ".", -1)
+		parts := strings.SplitN(host, ".", -1)
 		if len(parts) > 3 {
 			res = res + "/" + strings.Join(parts[:len(parts)-3], ".")
 		}
@@ -53,7 +53,7 @@ func canonicalizedResource(url *http.URL) string {
 	}
 
 	// RawPath will include the bucket if not in the host
-	res = res + strings.Split(url.RawPath, "?", 2)[0]
+	res = res + strings.SplitN(url.RawPath, "?", 2)[0]
 
 	// Include a sorted list of query parameters that have
 	// special meaning to aws.  These should stay decoded for
@@ -72,7 +72,7 @@ func canonicalizedResource(url *http.URL) string {
 	}
 
 	if len(amz) > 0 {
-		sort.SortStrings(amz)
+		sort.Strings(amz)
 		res = res + "?" + strings.Join(amz, "&")
 	}
 
@@ -122,7 +122,7 @@ func StringToSign(method string, url *http.URL, requestHeaders http.Header, expi
 		}
 	}
 
-	sort.SortStrings(headers)
+	sort.Strings(headers)
 
 	// overrideDate is used for query string "expires" auth
 	// and is a unix timestamp
@@ -168,7 +168,7 @@ func Authorization(req *http.Request, key, secret string) string {
 func URL(url *http.URL, key, secret, method, expires string) (*http.URL, os.Error) {
 	sig := Signature(secret, StringToSign(method, url, http.Header{}, expires))
 	raw := url.Raw
-	parts := strings.Split(raw, "?", 2)
+	parts := strings.SplitN(raw, "?", 2)
 	params := parts[1:]
 	params = append(params, "AWSAccessKeyId="+key)
 	params = append(params, "Expires="+expires)
