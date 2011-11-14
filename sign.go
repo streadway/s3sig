@@ -2,6 +2,7 @@ package s3sig
 
 import (
 	"os"
+	"url"
 	"http"
 	"time"
 	"sort"
@@ -33,7 +34,7 @@ var amzQueryParams = map[string]bool{
 	"response-content-encoding":    true,
 }
 
-func canonicalizedResource(url *http.URL) string {
+func canonicalizedResource(url *url.URL) string {
 	var res string
 
 	// Strip any port declaration (443/80/8080/...)
@@ -91,7 +92,7 @@ func first(s []string) string {
 	Creates the StringToSign string for either query string
 	or Authorization header based authentication.
 */
-func StringToSign(method string, url *http.URL, requestHeaders http.Header, expires string) string {
+func StringToSign(method string, url *url.URL, requestHeaders http.Header, expires string) string {
 	// Positional headers are optional but should be captured
 	var contentMD5, contentType, date, amzDate string
 	var headers []string
@@ -162,10 +163,10 @@ func Authorization(req *http.Request, key, secret string) string {
 // Assumes no custom headers are sent so only needs access to a URL.
 // If you plan on sending x-amz-* headers with a query string authorization
 // you can use Signature(secret, StringToSign(url, headers, expires)) instead
-// Returns an http.URL struct constructed from the Raw URL with the AWS
+// Returns an url.URL struct constructed from the Raw URL with the AWS
 // query parameters appended at the end.
 // Assumes any fragments are not included in url.Raw
-func URL(url *http.URL, key, secret, method, expires string) (*http.URL, os.Error) {
+func URL(url *url.URL, key, secret, method, expires string) (*url.URL, os.Error) {
 	sig := Signature(secret, StringToSign(method, url, http.Header{}, expires))
 	raw := url.Raw
 	parts := strings.SplitN(raw, "?", 2)
@@ -175,7 +176,7 @@ func URL(url *http.URL, key, secret, method, expires string) (*http.URL, os.Erro
 	params = append(params, "Signature="+sig)
 	signed := strings.Join(append(parts[:1], strings.Join(params, "&")), "?")
 
-	return http.ParseURL(signed)
+	return url.Parse(signed)
 }
 
 // Authorizes an http.Request pointer in place by in-place replacing the
